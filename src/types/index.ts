@@ -33,6 +33,14 @@ export interface IBuyer {
 	address?: string
 }
 
+// Вывод ошибочных данных по покупателю
+export interface IBuyerErrors {
+	payment?: string
+	address?: string
+	phone?: string
+	email?: string
+}
+
 // Тип оплаты
 export type TPayment = 'card' | 'cash'
 

@@ -1,13 +1,13 @@
-import { IBuyer, TPayment } from '../../types'
+import { IBuyer, IBuyerErrors, TPayment } from '../../types'
 
 export class Buyer {
-	private payment: TPayment
+	private payment: TPayment | null
 	private address: string
 	private phone: string
 	private email: string
 
 	constructor() {
-		this.payment = '' as TPayment
+		this.payment = null
 		this.address = ''
 		this.phone = ''
 		this.email = ''
@@ -30,6 +30,10 @@ export class Buyer {
 	}
 
 	public getData(): IBuyer {
+		if (!this.payment) {
+			throw new Error('Payment is not set')
+		}
+
 		return {
 			payment: this.payment,
 			address: this.address,
@@ -39,14 +43,15 @@ export class Buyer {
 	}
 
 	public clear(): void {
-		this.payment = '' as TPayment
+		this.payment = null
 		this.address = ''
 		this.phone = ''
 		this.email = ''
 	}
 
-	public validate(): IBuyer {
-		const errors: IBuyer = {}
+	public validate(): IBuyerErrors {
+		const errors: IBuyerErrors = {}
+
 		if (!this.payment) {
 			errors.payment = 'Не выбран способ оплаты'
 		}
@@ -59,6 +64,7 @@ export class Buyer {
 		if (!this.email) {
 			errors.email = 'Не указан email'
 		}
+
 		return errors
 	}
 }

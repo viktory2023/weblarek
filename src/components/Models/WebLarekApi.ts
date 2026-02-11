@@ -1,13 +1,12 @@
-import { IOrder, IOrderError, IOrderResult, IProductList } from '../../types'
-import { Api } from '../base/Api'
+import { IOrder, IOrderError, IOrderResult, IProductList, IApi } from '../../types'
 
 /**
  * Класс для работы с API WebLarek
  */
 export class WebLarekApi {
-	readonly apiModel: Api
+	private readonly apiModel: IApi
 
-	constructor(apiModel: Api) {
+	constructor(apiModel: IApi) {
 		this.apiModel = apiModel
 	}
 
@@ -16,9 +15,7 @@ export class WebLarekApi {
 	 * @returns Список товаров
 	 */
 	public async get(): Promise<IProductList> {
-		return await this.apiModel.get<IProductList>('/product/').then(data => {
-			return data
-		})
+		return this.apiModel.get<IProductList>('/product/')
 	}
 
 	/**
@@ -27,10 +24,6 @@ export class WebLarekApi {
 	 * @returns Результат оформления заказа или ошибка
 	 */
 	public async post(order: IOrder): Promise<IOrderResult | IOrderError> {
-		return await this.apiModel
-			.post<IOrderResult | IOrderError>('/order/', order)
-			.then(data => {
-				return data
-			})
+		return this.apiModel.post<IOrderResult | IOrderError>('/order/', order)
 	}
 }

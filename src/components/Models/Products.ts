@@ -31,13 +31,13 @@ export class Products {
 	/**
 	 * Возвращает товар по его идентификатору.
 	 * @param id - Идентификатор товара.
-	 * @returns IProduct | Object - Объект товара или объект с ошибкой, если товар не найден.
+	 * @returns IProduct | undefined - Объект товара или объект с ошибкой, если товар не найден.
 	 */
-	getItem(id: string): IProduct | Object {
+	getItem(id: string): IProduct | undefined  {
 		const item = this.items.find(product => product.id === id)
 
 		if (!item) {
-			return { error: 'Item not found' }
+			return
 		}
 
 		return item
