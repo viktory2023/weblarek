@@ -4,11 +4,7 @@ export type ApiPostMethods = 'POST' | 'PUT' | 'DELETE'
 // Интерфейс для работы с API
 export interface IApi {
 	get<T extends object>(uri: string): Promise<T>
-	post<T extends object>(
-		uri: string,
-		data: object,
-		method?: ApiPostMethods
-	): Promise<T>
+	post<T extends object>(uri: string, data: object, method?: ApiPostMethods): Promise<T>
 }
 
 // Описание товара
@@ -27,18 +23,10 @@ export interface IBasketProduct extends IProduct {
 
 // Данные покупателя
 export interface IBuyer {
-	payment?: TPayment | string
+	payment?: TPayment | ''
 	email?: string
 	phone?: string
 	address?: string
-}
-
-// Вывод ошибочных данных по покупателю
-export interface IBuyerErrors {
-	payment?: string
-	address?: string
-	phone?: string
-	email?: string
 }
 
 // Тип оплаты

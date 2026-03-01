@@ -1,7 +1,7 @@
 type ApiPostMethods = 'POST' | 'PUT' | 'DELETE'
 
 export class Api {
-	private readonly baseUrl: string
+	readonly baseUrl: string
 	protected options: RequestInit
 
 	constructor(baseUrl: string, options: RequestInit = {}) {

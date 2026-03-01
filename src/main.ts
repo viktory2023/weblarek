@@ -1,85 +1,222 @@
 import './scss/styles.scss'
 
-import { Products, Basket, Buyer, WebLarekApi } from './components/Models'
-
-import { apiProducts } from './utils/data'
+import { EventEmitter } from './components/base/Events'
+import { WebLarekApi } from './components/Models/WebLarekApi'
 import { Api } from './components/base/Api'
-import { IBasketProduct } from './types'
-import { API_URL } from './utils/constants'
+import { Products } from './components/Models/Products'
+import { Basket } from './components/Models/Basket'
+import { Buyer } from './components/Models/Buyer'
+import { Page } from './components/View/Page'
+import { CardCatalog, CardPreview, CardBasket } from './components/View/Card'
+import { BasketView } from './components/View/BasketView'
+import { Modal } from './components/View/Modal'
+import { OrderForm, ContactsForm } from './components/View/Form'
+import { OrderSuccess } from './components/View/OrderSuccess'
+import { API_URL, CDN_URL, AppEvents } from './utils/constants'
+import { cloneTemplate } from './utils/utils'
+import { IBasketProduct, IOrder, IOrderResult, IProduct, TPayment } from './types'
 
-const productsModel = new Products()
-const basketModel = new Basket()
-const buyerModel = new Buyer()
-const apiModel = new Api(API_URL)
-const WebLarekApiModel = new WebLarekApi(apiModel)
+// инфраструктура
+const events = new EventEmitter()
+const apiBase = new Api(API_URL)
+const api = new WebLarekApi(apiBase)
 
-productsModel.setItems(apiProducts.items)
+// шаблоны
+const cardCatalogTpl = document.querySelector<HTMLTemplateElement>('#card-catalog')!
+const cardPreviewTpl = document.querySelector<HTMLTemplateElement>('#card-preview')!
+const cardBasketTpl = document.querySelector<HTMLTemplateElement>('#card-basket')!
+const basketTpl = document.querySelector<HTMLTemplateElement>('#basket')!
+const orderTpl = document.querySelector<HTMLTemplateElement>('#order')!
+const contactsTpl = document.querySelector<HTMLTemplateElement>('#contacts')!
+const successTpl = document.querySelector<HTMLTemplateElement>('#success')!
 
-// Если не сделать "as IBasketProduct",
-// тогда TypeScript считает что в корзину возможно будет добавлен товар с price: null.
-// Можно так же делать исключение и проверять "if (apiProducts.items[0].price !== null)" тогда кладем в корзину.
-// Возможно я запутался с типами корзины и списка товаров.
-// Пример:
-// if (apiProducts.items[0].price !== null) {
-// 	basketModel.add(apiProducts.items[0])
-// }
-basketModel.add(apiProducts.items[0] as IBasketProduct)
+// модели
+const products = new Products(events)
+const basket = new Basket(events)
+const buyer = new Buyer(events)
 
-// КОРЗИНА
-console.log('--- КОРЗИНА ---')
-console.log('Товары в корзине:', basketModel.getItems())
-console.log('Количество товаров:', basketModel.getCount())
-console.log('Общая сумма:', basketModel.getTotal())
-console.log('Содержит товар с id "1":', basketModel.contains('1'))
-console.log(
-	'Содержит товар с id "854cef69-976d-4c2a-a18c-2aa45046c390":',
-	basketModel.contains('854cef69-976d-4c2a-a18c-2aa45046c390')
-)
+// view
+const page = new Page(document.body, events)
+const modal = new Modal(document.querySelector<HTMLElement>('#modal-container')!, events)
+const basketView = new BasketView(cloneTemplate(basketTpl), events)
+const orderForm = new OrderForm(cloneTemplate<HTMLFormElement>(orderTpl), events)
+const contactsForm = new ContactsForm(cloneTemplate<HTMLFormElement>(contactsTpl), events)
 
-// ТОВАРЫ
-console.log('--- ТОВАРЫ ---')
-console.log('Все товары:', productsModel.getItems())
-console.log('Поиск товара по id "1":', productsModel.getItem('1'))
-console.log(
-	'Поиск товара по id "854cef69-976d-4c2a-a18c-2aa45046c390":',
-	productsModel.getItem('854cef69-976d-4c2a-a18c-2aa45046c390')
-)
+// Вспомогательная функция: создать DOM-элементы карточек корзины
+function renderBasketItems(): HTMLElement[] {
+	return basket.getItems().map((item, index) =>
+		new CardBasket(cloneTemplate(cardBasketTpl), {
+			onClick: () => basket.remove(item),
+		}).render({
+			title: item.title,
+			price: item.price,
+			index: index + 1,
+		})
+	)
+}
 
-productsModel.setPreview(apiProducts.items[0])
-console.log('Preview после установки:', productsModel.getPreview())
-productsModel.setPreview(null)
-console.log('Preview после сброса:', productsModel.getPreview())
-
-// ПОКУПАТЕЛЬ (пустые данные)
-console.log('--- ПОКУПАТЕЛЬ (пустые данные) ---')
-const emptyBuyer = new Buyer()
-console.log('Валидация пустого покупателя:', emptyBuyer.validate())
-
-// ПОКУПАТЕЛЬ (заполненные данные)
-console.log('--- ПОКУПАТЕЛЬ (заполненные данные) ---')
-buyerModel.setEmail('mail@mail.com')
-buyerModel.setPhone('+1234567890')
-buyerModel.setAddress('Chelyabinsk, Lenina St, 5')
-buyerModel.setPayment('card')
-console.log('Данные покупателя:', buyerModel.getData())
-console.log('Валидация заполненного покупателя:', buyerModel.validate())
-
-// ПОКУПАТЕЛЬ (частично заполненные данные)
-console.log('--- ПОКУПАТЕЛЬ (частично заполненные данные) ---')
-const partialBuyer = new Buyer()
-partialBuyer.setEmail('test@test.com')
-partialBuyer.setPayment('cash')
-console.log('Данные частично заполненного покупателя:', partialBuyer.getData())
-console.log('Валидация:', partialBuyer.validate())
-
-// API
-console.log('--- API ---')
-const productsData = await WebLarekApiModel.get()
-console.log('Массив товаров с сервера: ', productsData.items)
-
-const orderResult = await WebLarekApiModel.post({
-	total: basketModel.getTotal(),
-	items: basketModel.getItems().map(item => item.id),
-	...buyerModel.getData()
+// каталог
+events.on(AppEvents.ProductsChanged, (items: IProduct[]) => {
+	const cards = items.map((item) =>
+		new CardCatalog(cloneTemplate(cardCatalogTpl), {
+			onClick: () => events.emit(AppEvents.CardSelect, item),
+		}).render({
+			title: item.title,
+			price: item.price,
+			category: item.category,
+			image: CDN_URL + item.image,
+		})
+	)
+	page.render({ catalog: cards, counter: basket.getCount() })
 })
-console.log('Ответ сервера при оформлении заказа: ', orderResult)
+
+// детальная карточка
+
+// клик по карточке → открываем превью
+events.on(AppEvents.CardSelect, (item: IProduct) => {
+	products.setPreview(item)
+})
+
+// данные пришли из модели — рендерим и открываем модалку
+events.on(AppEvents.ProductPreview, (item: IProduct) => {
+	const inBasket = basket.contains(item.id)
+	const noPrice = item.price === null
+
+	const cardPreview = new CardPreview(cloneTemplate(cardPreviewTpl), {
+		onClick: () => (inBasket ? events.emit(AppEvents.CardRemove, item) : events.emit(AppEvents.CardAdd, item)),
+	})
+
+	modal.render({
+		content: cardPreview.render({
+			...item,
+			image: CDN_URL + item.image,
+			buttonText: noPrice ? 'Недоступно' : inBasket ? 'Удалить из корзины' : 'В корзину',
+			buttonDisabled: noPrice,
+		}),
+	})
+})
+
+// добавляем в корзину и закрываем
+events.on(AppEvents.CardAdd, (item: IProduct) => {
+	if (item.price !== null) {
+		basket.add(item as IBasketProduct)
+	}
+	modal.close()
+})
+
+// убираем из корзины и закрываем
+events.on(AppEvents.CardRemove, (item: IBasketProduct) => {
+	basket.remove(item)
+	modal.close()
+})
+
+// корзина
+
+// иконка корзины в шапке
+events.on(AppEvents.BasketOpen, () => {
+	modal.render({
+		content: basketView.render({
+			items: renderBasketItems(),
+			total: basket.getTotal(),
+			valid: basket.getCount() > 0,
+		}),
+	})
+})
+
+// обновляем счётчик и перерисовываем корзину
+events.on(AppEvents.BasketChanged, () => {
+	page.render({ counter: basket.getCount() })
+	basketView.render({
+		items: renderBasketItems(),
+		total: basket.getTotal(),
+		valid: basket.getCount() > 0,
+	})
+})
+
+// оформление — шаг 1
+
+// «Оформить» в корзине → открываем форму оплаты и адреса
+events.on(AppEvents.OrderOpen, () => {
+	modal.render({ content: orderForm.render() })
+})
+
+// выбор способа оплаты
+events.on<{ payment: TPayment }>(AppEvents.OrderPayment, ({ payment }) => {
+	buyer.setPayment(payment)
+})
+
+// конкретное поле определяется по имени инпута
+events.on(AppEvents.FormChange, ({ field, value }: { field: string; value: string }) => {
+	if (field === 'address') buyer.setAddress(value)
+	else if (field === 'email') buyer.setEmail(value)
+	else if (field === 'phone') buyer.setPhone(value)
+})
+
+// при любом изменении данных покупателя обновляем обе формы
+events.on(AppEvents.BuyerChanged, () => {
+	const data = buyer.getData()
+	const errors = buyer.validate()
+
+	orderForm.render({
+		payment: data.payment,
+		address: data.address,
+		valid: !errors.payment && !errors.address,
+		errors: [errors.payment, errors.address].filter(Boolean).join('; '),
+	})
+
+	contactsForm.render({
+		email: data.email,
+		phone: data.phone,
+		valid: !errors.email && !errors.phone,
+		errors: [errors.email, errors.phone].filter(Boolean).join('; '),
+	})
+})
+
+// шаг 1 пройден — переходим к контактам
+events.on(AppEvents.OrderSubmit, () => {
+	modal.render({ content: contactsForm.render() })
+})
+
+// оформление — шаг 2
+
+// собираем заказ и отправляем
+events.on(AppEvents.ContactsSubmit, () => {
+	const orderData: IOrder = {
+		...buyer.getData(),
+		total: basket.getTotal(),
+		items: basket.getItems().map((i) => i.id),
+	} as IOrder
+	api
+		.post(orderData)
+		.then((result) => {
+			const total = (result as IOrderResult).total
+			basket.clear()
+			buyer.clear()
+			const successView = new OrderSuccess(cloneTemplate(successTpl), events)
+			modal.render({ content: successView.render({ total }) })
+		})
+		.catch((err: unknown) => {
+			contactsForm.render({ valid: false, errors: String(err) })
+		})
+})
+
+// возврат в каталог
+events.on(AppEvents.SuccessClose, () => {
+	modal.close()
+})
+
+// пока модалка открыта — страница не скроллится
+events.on(AppEvents.ModalOpen, () => {
+	page.render({ locked: true })
+})
+
+// закрытие модалки — только снятие блокировки прокрутки
+events.on(AppEvents.ModalClose, () => {
+	page.render({ locked: false })
+})
+
+// загружаем товары
+api
+	.get()
+	.then((data) => products.setItems(data.items))
+	.catch(() => {})

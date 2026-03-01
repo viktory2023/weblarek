@@ -1,60 +1,36 @@
 import { IProduct } from '../../types'
+import { IEvents } from '../base/Events'
+import { AppEvents } from '../../utils/constants'
 
-/**
- * Класс, представляющий коллекцию товаров.
- */
 export class Products {
 	private items: IProduct[]
 	private preview: IProduct | null
 
-	constructor() {
+	constructor(protected events: IEvents) {
 		this.items = []
 		this.preview = null
 	}
 
-	/**
-	 * Устанавливает массив товаров.
-	 * @param items - Массив объектов товаров.
-	 */
+	// сохраняем список и оповещаем подписчиков
 	setItems(items: IProduct[]): void {
 		this.items = items
+		this.events.emit(AppEvents.ProductsChanged, items)
 	}
 
-	/**
-	 * Возвращает массив всех товаров.
-	 * @returns IProduct[] - Массив объектов товаров.
-	 */
 	getItems(): IProduct[] {
 		return this.items
 	}
 
-	/**
-	 * Возвращает товар по его идентификатору.
-	 * @param id - Идентификатор товара.
-	 * @returns IProduct | undefined - Объект товара или объект с ошибкой, если товар не найден.
-	 */
-	getItem(id: string): IProduct | undefined  {
-		const item = this.items.find(product => product.id === id)
-
-		if (!item) {
-			return
-		}
-
-		return item
+	getItem(id: string): IProduct | undefined {
+		return this.items.find((product) => product.id === id)
 	}
 
-	/**
-	 * Устанавливает товар для предпросмотра.
-	 * @param item - Объект товара или null для очистки предпросмотра.
-	 */
+	// null — сбросить выбранный товар
 	setPreview(item: IProduct | null): void {
 		this.preview = item
+		this.events.emit(AppEvents.ProductPreview, item ?? undefined)
 	}
 
-	/**
-	 * Возвращает товар для предпросмотра.
-	 * @returns IProduct | null - Объект товара или null, если предпросмотр не установлен.
-	 */
 	getPreview(): IProduct | null {
 		return this.preview
 	}

@@ -1,4 +1,4 @@
-import { IOrder, IOrderError, IOrderResult, IProductList, IApi } from '../../types'
+import { IApi, IOrder, IOrderError, IOrderResult, IProductList } from '../../types'
 
 /**
  * Класс для работы с API WebLarek
@@ -24,6 +24,8 @@ export class WebLarekApi {
 	 * @returns Результат оформления заказа или ошибка
 	 */
 	public async post(order: IOrder): Promise<IOrderResult | IOrderError> {
-		return this.apiModel.post<IOrderResult | IOrderError>('/order/', order)
+		return await this.apiModel.post<IOrderResult | IOrderError>('/order/', order).then((data) => {
+			return data
+		})
 	}
 }
