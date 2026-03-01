@@ -6,11 +6,14 @@ import { Api } from './components/base/Api'
 import { Products } from './components/Models/Products'
 import { Basket } from './components/Models/Basket'
 import { Buyer } from './components/Models/Buyer'
-import { Page } from './components/View/Page'
-import { CardCatalog, CardPreview, CardBasket } from './components/View/Card'
+import { Header, Gallery } from './components/View/Page'
+import { CardBasket } from './components/View/CardBasket'
+import { CardCatalog } from './components/View/CardCatalog' 
+import { CardPreview} from './components/View/CardPreview'
 import { BasketView } from './components/View/BasketView'
 import { Modal } from './components/View/Modal'
-import { OrderForm, ContactsForm } from './components/View/Form'
+import { OrderForm } from './components/View/OrderForm'
+import { ContactsForm } from './components/View/ContactsForm'
 import { OrderSuccess } from './components/View/OrderSuccess'
 import { API_URL, CDN_URL, AppEvents } from './utils/constants'
 import { cloneTemplate } from './utils/utils'
@@ -36,17 +39,22 @@ const basket = new Basket(events)
 const buyer = new Buyer(events)
 
 // view
-const page = new Page(document.body, events)
+const header = new Header(document.body, events)
+const gallery = new Gallery(document.body)
 const modal = new Modal(document.querySelector<HTMLElement>('#modal-container')!, events)
 const basketView = new BasketView(cloneTemplate(basketTpl), events)
 const orderForm = new OrderForm(cloneTemplate<HTMLFormElement>(orderTpl), events)
 const contactsForm = new ContactsForm(cloneTemplate<HTMLFormElement>(contactsTpl), events)
 
+// ✅ создаём один раз
+const successView = new OrderSuccess(cloneTemplate(successTpl), events)
+
 // Вспомогательная функция: создать DOM-элементы карточек корзины
 function renderBasketItems(): HTMLElement[] {
 	return basket.getItems().map((item, index) =>
 		new CardBasket(cloneTemplate(cardBasketTpl), {
-			onClick: () => basket.remove(item),
+			// ✅ теперь emit, а не прямой вызов модели
+			onClick: () => events.emit(AppEvents.CardRemove, item),
 		}).render({
 			title: item.title,
 			price: item.price,
@@ -67,30 +75,36 @@ events.on(AppEvents.ProductsChanged, (items: IProduct[]) => {
 			image: CDN_URL + item.image,
 		})
 	)
-	page.render({ catalog: cards, counter: basket.getCount() })
+	gallery.render({ catalog: cards })
+	header.render({ counter: basket.getCount() })
 })
 
 // детальная карточка
 
-// клик по карточке → открываем превью
 events.on(AppEvents.CardSelect, (item: IProduct) => {
 	products.setPreview(item)
 })
 
-// данные пришли из модели — рендерим и открываем модалку
 events.on(AppEvents.ProductPreview, (item: IProduct) => {
 	const inBasket = basket.contains(item.id)
 	const noPrice = item.price === null
 
 	const cardPreview = new CardPreview(cloneTemplate(cardPreviewTpl), {
-		onClick: () => (inBasket ? events.emit(AppEvents.CardRemove, item) : events.emit(AppEvents.CardAdd, item)),
+		onClick: () =>
+			inBasket
+				? events.emit(AppEvents.CardRemove, item)
+				: events.emit(AppEvents.CardAdd, item),
 	})
 
 	modal.render({
 		content: cardPreview.render({
 			...item,
 			image: CDN_URL + item.image,
-			buttonText: noPrice ? 'Недоступно' : inBasket ? 'Удалить из корзины' : 'В корзину',
+			buttonText: noPrice
+				? 'Недоступно'
+				: inBasket
+					? 'Удалить из корзины'
+					: 'В корзину',
 			buttonDisabled: noPrice,
 		}),
 	})
@@ -104,7 +118,7 @@ events.on(AppEvents.CardAdd, (item: IProduct) => {
 	modal.close()
 })
 
-// убираем из корзины и закрываем
+// убираем из корзины и закрываем (логика в обработчике — всё по заданию)
 events.on(AppEvents.CardRemove, (item: IBasketProduct) => {
 	basket.remove(item)
 	modal.close()
@@ -112,7 +126,6 @@ events.on(AppEvents.CardRemove, (item: IBasketProduct) => {
 
 // корзина
 
-// иконка корзины в шапке
 events.on(AppEvents.BasketOpen, () => {
 	modal.render({
 		content: basketView.render({
@@ -125,7 +138,7 @@ events.on(AppEvents.BasketOpen, () => {
 
 // обновляем счётчик и перерисовываем корзину
 events.on(AppEvents.BasketChanged, () => {
-	page.render({ counter: basket.getCount() })
+	header.render({ counter: basket.getCount() })
 	basketView.render({
 		items: renderBasketItems(),
 		total: basket.getTotal(),
@@ -135,24 +148,20 @@ events.on(AppEvents.BasketChanged, () => {
 
 // оформление — шаг 1
 
-// «Оформить» в корзине → открываем форму оплаты и адреса
 events.on(AppEvents.OrderOpen, () => {
 	modal.render({ content: orderForm.render() })
 })
 
-// выбор способа оплаты
 events.on<{ payment: TPayment }>(AppEvents.OrderPayment, ({ payment }) => {
 	buyer.setPayment(payment)
 })
 
-// конкретное поле определяется по имени инпута
 events.on(AppEvents.FormChange, ({ field, value }: { field: string; value: string }) => {
 	if (field === 'address') buyer.setAddress(value)
 	else if (field === 'email') buyer.setEmail(value)
 	else if (field === 'phone') buyer.setPhone(value)
 })
 
-// при любом изменении данных покупателя обновляем обе формы
 events.on(AppEvents.BuyerChanged, () => {
 	const data = buyer.getData()
 	const errors = buyer.validate()
@@ -172,28 +181,31 @@ events.on(AppEvents.BuyerChanged, () => {
 	})
 })
 
-// шаг 1 пройден — переходим к контактам
 events.on(AppEvents.OrderSubmit, () => {
 	modal.render({ content: contactsForm.render() })
 })
 
 // оформление — шаг 2
 
-// собираем заказ и отправляем
 events.on(AppEvents.ContactsSubmit, () => {
 	const orderData: IOrder = {
 		...buyer.getData(),
 		total: basket.getTotal(),
 		items: basket.getItems().map((i) => i.id),
 	} as IOrder
+
 	api
 		.post(orderData)
 		.then((result) => {
 			const total = (result as IOrderResult).total
+
 			basket.clear()
 			buyer.clear()
-			const successView = new OrderSuccess(cloneTemplate(successTpl), events)
-			modal.render({ content: successView.render({ total }) })
+
+			// ✅ используем уже созданный экземпляр
+			modal.render({
+				content: successView.render({ total }),
+			})
 		})
 		.catch((err: unknown) => {
 			contactsForm.render({ valid: false, errors: String(err) })
@@ -205,18 +217,8 @@ events.on(AppEvents.SuccessClose, () => {
 	modal.close()
 })
 
-// пока модалка открыта — страница не скроллится
-events.on(AppEvents.ModalOpen, () => {
-	page.render({ locked: true })
-})
-
-// закрытие модалки — только снятие блокировки прокрутки
-events.on(AppEvents.ModalClose, () => {
-	page.render({ locked: false })
-})
-
 // загружаем товары
 api
 	.get()
 	.then((data) => products.setItems(data.items))
-	.catch(() => {})
+	.catch(() => { })

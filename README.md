@@ -334,3 +334,315 @@ constructor(api: IApi)
 * результаты работы выводятся в консоль с помощью `console.log`.
 
 Для тестирования каталога товаров используются данные `apiProducts` из файла `utils/data.ts`.
+
+# Слой представления (View)
+
+Слой **View** в проекте отвечает исключительно за работу с DOM:\
+- поиск и хранение HTML-элементов,\
+- обновление текста и атрибутов,\
+- навешивание обработчиков,\
+- генерацию событий через `EventEmitter`.
+
+View **не хранит бизнес-данные** (модель каталога, корзины, заказа) ---
+он только отображает уже подготовленные данные.
+
+Все View-классы наследуются от базового `Component<T>` и взаимодействуют
+с презентером через: - `events.emit(...)` - либо `actions.onClick`
+
+## Класс Page
+
+Отвечает за главную страницу магазина синапсов: - отображение каталога
+товаров, - обновление счётчика корзины, - блокировку прокрутки при
+открытом модальном окне.
+
+### Конструктор
+
+`constructor(container: HTMLElement, events: IEvents)`
+
+-   `container` --- корневой элемент страницы (`document.body`)
+-   `events` --- брокер событий
+
+В конструкторе: - находится кнопка корзины, - вешается обработчик клика
+→ генерируется событие `basket:open`.
+
+### Поля
+
+-   `_counter: HTMLElement` --- счётчик товаров в корзине (в шапке)
+-   `_gallery: HTMLElement` --- контейнер карточек каталога
+-   `_wrapper: HTMLElement` --- обёртка страницы (для блокировки
+    скролла)
+-   `_basket: HTMLButtonElement` --- кнопка корзины
+
+### Сеттеры
+
+`set counter(value: number)`\
+Обновляет число товаров в корзине.
+
+`set catalog(items: HTMLElement[])`\
+Полностью заменяет содержимое каталога карточками товаров.
+
+`set locked(value: boolean)`\
+Добавляет или убирает CSS-класс `page__wrapper_locked`.\
+Используется при событиях `modal:open` / `modal:close`.
+
+## Класс Modal
+
+Управляет модальным окном: - открытие, - закрытие, - замена содержимого.
+
+### Конструктор
+
+`constructor(container: HTMLElement, events: IEvents)`
+
+-   `container` --- `#modal-container`
+-   `events` --- брокер событий
+
+Вешает слушатели: - клик по `.modal__close` → `close()` - клик по
+оверлею → `close()`
+
+### Поля
+
+-   `_closeButton: HTMLButtonElement`
+-   `_content: HTMLElement`
+
+### Сеттер
+
+`set content(value: HTMLElement)`\
+Заменяет содержимое модального окна.
+
+### Методы
+
+`open(): void`\
+- добавляет класс `modal_active` - генерирует `modal:open`
+
+`close(): void`\
+- удаляет класс `modal_active` - генерирует `modal:close`
+
+`render(data: { content: HTMLElement }): HTMLElement`\
+- устанавливает контент - открывает модалку - возвращает контейнер
+
+# Семейство Card
+
+Карточки отображают товары на разных этапах: - каталог - превью -
+корзина
+
+Все наследуются от:
+
+`abstract class Card<T extends ICard>`
+
+## Абстрактный класс Card
+
+Базовая логика отображения товара: - название - цена - категория -
+изображение
+
+### Конструктор
+
+`constructor(container: HTMLElement)`\
+Принимает клонированный шаблон карточки.
+
+### Поля
+
+-   `_title: HTMLElement`
+-   `_price: HTMLElement`
+-   `_category?: HTMLElement`
+-   `_image?: HTMLImageElement`
+
+### Сеттеры
+
+`set title(value: string)`
+
+`set price(value: number | null)`\
+Если `null` → отображается «Бесценно».
+
+`set category(value: string)`\
+Устанавливает текст категории и добавляет CSS-модификатор через
+`categoryMap`.
+
+`set image(src: string)`\
+Устанавливает изображение через `setImage`.
+
+## CardCatalog
+
+Карточка товара в галерее.
+
+### Конструктор
+
+`constructor(container: HTMLElement, actions?: ICardActions)`
+
+-   использует шаблон `#card-catalog`
+-   при клике на карточку вызывает `actions.onClick`
+
+Используется для открытия превью товара (`card:select`).
+
+## CardPreview
+
+Карточка товара в модальном окне.
+
+Отображает: - название - описание - цену - кнопку действия
+
+### Дополнительные поля
+
+-   `_description: HTMLElement`
+-   `_button: HTMLButtonElement`
+
+### Дополнительные сеттеры
+
+`set description(value: string)`
+
+`set buttonText(value: string)`\
+Тексты: - «В корзину» - «Удалить из корзины» - «Недоступно»
+
+`set buttonDisabled(value: boolean)`
+
+Клик по кнопке вызывает `actions.onClick`.
+
+## CardBasket
+
+Карточка товара внутри корзины.
+
+Отображает: - порядковый номер - название - цену - кнопку удаления
+
+### Дополнительные поля
+
+-   `_index: HTMLElement`
+-   `_deleteButton: HTMLButtonElement`
+
+### Сеттер
+
+`set index(value: number)`
+
+Клик по кнопке → `actions.onClick` (удаление из корзины).
+
+# Класс BasketView
+
+Компонент корзины в модальном окне.
+
+Отвечает за: - список товаров, - итоговую сумму, - кнопку «Оформить».
+
+### Конструктор
+
+`constructor(container: HTMLElement, events: IEvents)`
+
+-   шаблон `#basket`
+-   при клике на кнопку генерирует `order:open`
+
+### Поля
+
+-   `_list: HTMLElement`
+-   `_total: HTMLElement`
+-   `_button: HTMLButtonElement`
+
+### Сеттеры
+
+`set items(elements: HTMLElement[])`\
+- заменяет список карточек\
+- если пусто → «Корзина пуста»
+
+`set total(value: number)`\
+Отображает:\
+`N синапсов`
+
+`set valid(value: boolean)`\
+Управляет `disabled` у кнопки «Оформить».
+
+# Семейство Form
+
+Формы оформления заказа.
+
+Базовый класс:
+
+`abstract class Form<T>`
+
+Общая логика: - обработка `input` - обработка `submit` - генерация
+событий - управление валидацией
+
+## Абстрактный Form
+
+### Конструктор
+
+`constructor(container: HTMLFormElement, events: IEvents)`
+
+Вешает: - `input` - `submit`
+
+### Поведение
+
+При любом изменении поля генерируется событие:\
+`form:change` с `{ field, value }`
+
+### Поля
+
+-   `_submit: HTMLButtonElement`
+-   `_errors: HTMLElement`
+
+### Сеттеры
+
+`set valid(value: boolean)`
+
+`set errors(value: string)`
+
+### Абстрактный метод
+
+`protected abstract onSubmit(): void`
+
+## OrderForm
+
+Шаг 1 оформления: - выбор оплаты - ввод адреса
+
+### Дополнительные поля
+
+-   `_paymentButtons: HTMLButtonElement[]`
+-   `_addressInput: HTMLInputElement`
+
+### Сеттеры
+
+`set payment(value: TPayment | '')`
+
+`set address(value: string)`
+
+### События
+
+Клик по оплате:\
+`order:paymentChange`
+
+Submit:\
+`order:submit` с `{ payment, address }`
+
+## ContactsForm
+
+Шаг 2 оформления: - email - телефон
+
+### Поля
+
+-   `_emailInput`
+-   `_phoneInput`
+
+### Сеттеры
+
+`set email(value: string)`\
+`set phone(value: string)`
+
+### Событие
+
+При submit:\
+`contacts:submit`
+
+# OrderSuccess
+
+Экран успешного заказа.
+
+Отображает: - списанную сумму синапсов - кнопку возврата к покупкам
+
+### Поля
+
+-   `_close: HTMLButtonElement`
+-   `_description: HTMLElement`
+
+### Сеттер
+
+`set total(value: number)`\
+Отображает:\
+`Списано N синапсов`
+
+### Событие
+
+Клик по кнопке:\
+`success:close`
